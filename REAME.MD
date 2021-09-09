@@ -51,9 +51,15 @@
 为了解决计数器算法临界值的问题，发明了滑动窗口算法。在TCP网络通信协议中，就采用滑动时间窗口算法来解决网络拥堵的问题。、
 滑动时间窗口将计数器算法中的实际周期切分成多个小的时间窗口，分贝在每个小的时间窗口中记录访问次数，然后根据时间将窗口往前滑动并删除国企的小
 时间窗口。最终只需要统计滑动窗口范围内的小时间串口的总的请求的即可。
+阿里的sentinel就是使用滑动时间窗口的例子
+
 ```
+[sentinel](./files/sentinel-dashboard-1.8.2.jar)
 
-
+启动脚本
+```text
+java -Dserver.port=8080 -Dcsp.sentinel.dashboard.server=localhost:8080 -Dproject.name=sentinel-dashboard -jar sentinel-dashboard-1.8.2.jar
+```
 
 
 ## 设计微服务时遵守的原则
