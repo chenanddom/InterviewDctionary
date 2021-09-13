@@ -191,11 +191,50 @@ DROP PROCEDURE p_name;
 
 
 
+* explain 之 type
+type 现实的是访问类型，是较为重要的一个指标，可以取值为:
+
+| type | 含义 |
+| :------| :------ | 
+| NULL|MySQL不访问任何表，索引，直接返回结果（例如EXPLAIN SELECT NOW();） |
+|system |表只有一行记录(等于系统表)，这是const类型的特例，一般不会出现 (EXPLAIN SELECT a.*FROM (SELECT * FROM t_user WHERE id=1)a)|
+| const|表示通过索引一次就找到了，const用于比较primarykey或者unique索引。因为只匹配一行数据，所以很快。如果将主键置于where列表中，MySQL就能将改查询转换为一个常量。const于将"主键"或者"唯一"索引的所有部分于常量值进行比较(EXPLAIN SELECT *FROM t_user WHERE username='admin';) |
+|eq_ref |类似于ref，区别在于使用的是唯一索引，使用主键的关联擦汗寻，关联查询的记录只有一条，常见于主键或者唯一索引扫描（EXPLAIN SELECT *FROM t_user u,t_role r WHERE u.`id`=r.`id`;） |
+|ref |非唯一索引扫描，返回匹配某个单独值得所有行。本质上也是一种索引访问，但会所有匹配某个单独值的所有行(多个)-- 创建一个非唯一索引         CREATE INDEX idx_name ON t_user(`name`) ;                                        -- 查看执行计划                                                           EXPLAIN SELECT *FROM t_user WHERE `name`='系统管理员'; |
+|range|只检索给定返回的行，使用一个索引来选择行，where之后出现的between,<,>,in等操作 |
+| index|index于ALL的区别为index类型只是遍历了索引树，通常逼ALL快，ALL是遍历数据文件 (EXPLAIN SELECT id FROM t_user;)|
+| ALL|将遍历权变一找到匹配的行 |
+
+结果值从最好到最坏以此是：
+
+```sql
+NULL > system > const > eq_ref > ref > fulltext > ref_or_null > index_merge > unique_subquery > index_subquery > range > index > ALL
 
 
+system > const > eq_ref > ref > range > index > ALL
+```
 
+* explain之key
+ 1. possible_keys:现实可能应用在这张表的索引，一个或者多个
+ 2. key:实际使用的索引，如果为NULL，则没有使用索引
+ 3. key_len:表示索引中使用的字节数，改之为索引字段最大可能的长度，也不损失精度的情况下，长度越短越好。
+ 
 
+* explain之rows
+```text
+扫描行的记录
+```
 
+* explain之extra
+
+其他的额外的执行计划信息，在该列展示。
+
+| type | 含义 |
+| ------| ------ | 
+|using filesort |(表示查询出来的结果需要额外的排序，数据量笑得在内存，大得话在磁盘，需要优化)说明mysql会对书使用一个外部的索引排序，而不是按照表内的索引进行读取，称为"文件排序" | 
+|using temporary|(查询使用到了临时表，比如去重，分组，排序等)使用临时表保存中间结果，MySQL在对查询结果排序使用临时表，常见的有order by和group by | 
+|using index |(表示查询需要使用到索引，索引满足所有得数据需求)表示相应的select操作使用了覆盖索引，避免访问表的数据行 | 
+|using where| 表示查询需要通过索引徽标查询数据|
 
 
 
