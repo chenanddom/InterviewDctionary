@@ -240,10 +240,88 @@ system > const > eq_ref > ref > range > index > ALL
 
 
 
+###应用优化
+
+#### 对应用的优化
+使用数据库连接池
+
+#### 减少对MySQL的访问
+在编写应用代码时，需要能够理清对数据库的访问逻辑。能够一次连接就获取到结果的，就不用两次连接，这样可以大大减少对数据库无用的重复请求。
+
+比如 ，需要获取书籍的id 和name字段 ， 则查询如下：
+
+```sql
+ select id , name from tb_book;
+```
+
+之后，在业务逻辑中有需要获取到书籍状态信息， 则查询如下：
+
+```sql
+select id , status from tb_book;
+```
+
+这样，就需要向数据库提交两次请求，数据库就要做两次查询操作。其实完全可以用一条SQL语句得到想要的结果。
+
+```sql
+select id, name , status from tb_book;
+```
+
+#### 开启查询缓存
+
+MySQL的查询缓存默认是关闭的，需要手动配置参数 query_cache_type ， 来开启查询缓存。query_cache_type 该参数的可取值有三个 ：
+
+| 值          | 含义                                                         |
+| ----------- | ------------------------------------------------------------ |
+| OFF 或 0    | 查询缓存功能关闭                                             |
+| ON 或 1     | 查询缓存功能打开，SELECT的结果符合缓存条件即会缓存，否则，不予缓存，显式指定 SQL_NO_CACHE，不予缓存 |
+| DEMAND 或 2 | 查询缓存功能按需进行，显式指定 SQL_CACHE 的SELECT语句才会缓存；其它均不予缓存 |
+
+在 /usr/my.ini 配置中，增加以下配置 ：
+![my.ini ](./files/1a55ac950c8d9f07e479723c71fdee3.png)
 
 
+#### 增加cache层
+在应用中，我们可以在应用中增加 缓存 层来达到减轻数据库负担的目的。缓存层有很多种，也有很多实现方式，只要能达到降低数据库的负担又能满足应用需求就可以。
+
+因此可以部分数据从数据库中抽取出来放到应用端以文本方式存储， 或者使用框架(Mybatis, Hibernate)提供的一级缓存/二级缓存，或者使用redis数据库来缓存数据 。
+
+#### 1.3 负载均衡
+负载均衡是应用中使用非常普遍的一种优化方法，它的机制就是利用某种均衡算法，将固定的负载量分布到不同的服务器上， 以此来降低单台服务器的负载，达到优化的效果。
+#### 1.3.1 利用MySQL复制分流查询
+通过MySQL的主从复制，实现读写分离，使增删改操作走主节点，查询操作走从节点，从而可以降低单台服务器的读写压力。
+
+![利用MySQL复制分流查询](./files/1.jpg)
 
 
+####查询缓存失效的情况
+）` SQL 语句不一致的情况， 要想命中查询缓存，查询的SQL语句必须一致。`
 
+```sql
+SQL1 : select count(*) from tb_item;
+SQL2 : Select count(*) from tb_item;
+```
 
+2） `当查询语句中有一些不确定的时，则不会缓存。如 ： now() , current_date() , curdate() , curtime() , rand() , uuid() , user() , database() 。`
+
+```sql
+SQL1 : select * from tb_item where updatetime < now() limit 1;
+SQL2 : select user();
+SQL3 : select database();
+```
+
+3） `不使用任何表查询语句。`
+
+```sql
+select 'A';
+```
+
+4）` 查询 mysql， information_schema或 performance_schema 数据库中的表时，不会走查询缓存。`(默认的系统数据库)
+
+```sql
+select * from information_schema.engines;
+```
+
+5） `在存储的函数，触发器或事件的主体内执行的查询。`
+
+6） `如果表更改，则使用该表的所有高速缓存查询都将变为无效并从高速缓存中删除`。这包括使用`MERGE`映射到已更改表的表的查询。一个表可以被许多类型的语句，如被改变 INSERT， UPDATE， DELETE， TRUNCATE TABLE， ALTER TABLE， DROP TABLE，或 DROP DATABASE 。
 
