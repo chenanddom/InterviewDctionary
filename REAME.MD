@@ -185,9 +185,155 @@ SHOW CREATE PROCEDURE p_name;
 DROP PROCEDURE p_name;
 ```
 
+### 触发器
+```text
+触发器市与表有关的数据库对象，指在insert/update/delete之前或者之后，出发并执行定义中定义的SQL语句集合。触发器的这种特征可以协助应用在
+数据库端确保数据的完整性，日志记录，数据校验等操作。
+```
+使用别名OLD和NEW来引用触发器中发生变化的记录内容，这与其他的数据库相似。现在触发器还指支持行级出发，不支持语句触发。
+
+| 触发器类型 | NEW和OLD的使用 |
+| :------| :------: |
+|INSERT型触发器|NEW表示将要或者已经新增的数据|
+|UPDATE型触发器|OLD表示修改之前的数据，NEW表示将要或者已经修改后的数据|
+|DELETE型触发器|OLD表示将要或者已经删除的数据|
+
+#### 触发器创建
+```sql
+create trigger trigger_name
+before/after insert/update/delete
+on table_name
+[for each row] -- 触发行级触发器
+begin
+
+
+end $
 
 
 
+CREATE TABLE emp_logs(
+id INT(11) PRIMARY KEY AUTO_INCREMENT,
+operation VARCHAR(32) NULL COMMENT '操作类型，insert/update/delete',
+operate_time DATETIME NOT NULL COMMENT '操作时间',
+operate_id INT(11) NOT NULL COMMENT '操作表id',
+operate_params VARCHAR(500) COMMENT '操作参数'
+);
+
+
+
+CREATE TABLE emp(id INT(11) PRIMARY KEY AUTO_INCREMENT,
+`name` VARCHAR(32),
+age INT,
+salary DECIMAL
+);
+
+
+
+
+DELIMITER $
+CREATE TRIGGER emp_insert_trigger
+AFTER INSERT
+ON emp
+FOR EACH ROW -- 申明是行级触发器
+BEGIN
+INSERT INTO emp_logs(id ,operation,operate_time,operate_id,operate_params)VALUES(NULL,"insert",NOW(),new.id,CONCAT(
+'after insert(id:',new.id,',name:',new.name,',age:',new.age,',salary:',new.salary));
+END $
+DELIMITER ;
+
+INSERT INTO emp(id,`name`,`age`,salary)VALUES(NULL,'张三',22,23000);
+
+SELECT *FROM emp_logs;
+
+
+
+DELIMITER $
+CREATE TRIGGER emp_update_trigger
+AFTER UPDATE
+ON emp
+FOR EACH ROW
+BEGIN
+INSERT INTO emp_logs(id ,operation,operate_time,operate_id,operate_params)VALUES(NULL,"update",NOW(),new.id,CONCAT(
+'before update(id:',old.id,',name:',old.name,',age:',old.age,',salary:',old.salary,')','after update(id:',new.id,',name:',new.name,',age:',new.age,',salary:',new.salary,')'));
+END $
+DELIMITER ;
+
+
+UPDATE emp SET `name`='zhangsan',age=29,salary=30000 WHERE id=1;
+
+
+DELIMITER $
+CREATE TRIGGER emp_delete_trigger
+AFTER DELETE
+ON emp
+FOR EACH ROW
+BEGIN
+INSERT INTO emp_logs(id ,operation,operate_time,operate_id,operate_params)VALUES(NULL,"delete",NOW(),old.id,CONCAT(
+'before delete(id:',old.id,',name:',old.name,',age:',old.age,',salary:',old.salary,')'));
+END $
+DELIMITER ;
+
+INSERT INTO emp(id,`name`,`age`,salary)VALUES(NULL,'lisi',26,25000);
+
+DELETE FROM emp WHERE id=2;
+
+SELECT *FROM emp;
+SELECT *FROM emp_logs;
+
+SELECT *FROM emp;
+# 查看触发器
+SHOW TRIGGERS;
+
+-- 删除触发器
+DROP TRIGGER emp_delete_trigger;
+
+```
+### MySQL优化
+```text
+-- 只是当期这个数据库的
+SHOW STATUS LIKE 'Com_______';
+-- 查看整个数据库是查询为主还是插入，修改，或者删除为主
+SHOW GLOBAL STATUS LIKE 'Com_______';
+-- innodb的操作数量
+SHOW STATUS LIKE 'Innodb_rows_%';
+```
+#### 定位低效率的执行SQL
+* 慢查询日志:通过查询日志定位那些执行效率抵消的SQL语句，用--log-show-queries[=file_name]选项启动时，mysqld写一个包含所有执行时间超过
+long_query_time秒的SQL语句的日志文件。
+
+* show prcesslist:慢查询日志在查询结束后才记录，所以在应用反映执行效率出现问题的时候慢查询日志并不能定位问题，可以使用show processlist
+命令查看当前MySQL在进行线程，包括线程状态，是否锁表等，可以实时的查看SQL的执行情况，同时对一些锁表操作进行优化。
+![show processlist](./files/show_processlist.PNG)
+
+* explain分析执行计划
+```text
+通过上面的步骤查询到低效的SQL语句之后，可以通过EXPLAIN或者DESC命令获取MySQL如何执行SELECT语句的信息，包括了SELECT语句如何连接和连接的
+顺序。
+```
+![explain各个字段的含义](./files/explain.PNG)
+
+| 字段 | 含义 |
+| :------| :------: |
+|id|select 查询的序列号，是一组数字，表示的是查询中执行的select子句或者操作表的顺序|
+|select_type|表示SELECT的类型，常见的取值有SIMPLE(简单表，即不使用表连接或者子查询),PRIMARY(主查询，即外层的查询),UNION(UNION中的第二个或者后面的查询),SUBQUERY(子查询中的第一个SELECT等)|
+|table|输出结果集的表|
+|type|表示连接类型，性能由好到差点连接类型未(system--->constant--->eq_ref--->ref--->ref_or_null--->index_merge--->index_subquery--->range--->index--->all)|
+|possible_keys|表示查询时,可能使用的索引|
+|key|表示实际使用的索引|
+|key_len|索引的长度|
+|rows|扫描行的数量|
+|extra|执行情况的说明和描述|
+
+* id相同的情况下按顺序由上到下的执行
+EXPLAIN SELECT *FROM t_role r,t_user u,user_role ur WHERE r.`id`=ur.`role_id` AND u.`id`=ur.`id`;
+
+![id相同的情况下按顺序由上到下的执行](./files/explain_2.PNG)
+
+* id 不同id值越大，优先级越高，越优先被执行
+EXPLAIN SELECT *FROM t_role WHERE id=(SELECT role_id FROM user_role WHERE user_id =(SELECT id FROM t_user WHERE username='stu2'));
+!id 不同id值越大，优先级越高，越优先被执行](./files/explain_3.PNG)
+
+* id有相同，也有不同，id相同的认为是一组，从上倒下顺序执行；在所有的组中，id越大越先执行。
 
 
 
@@ -236,7 +382,8 @@ system > const > eq_ref > ref > range > index > ALL
 |using index |(表示查询需要使用到索引，索引满足所有得数据需求)表示相应的select操作使用了覆盖索引，避免访问表的数据行 | 
 |using where| 表示查询需要通过索引徽标查询数据|
 
-
+### 索引的使用
+索引是数据库优化最常用的手段之一，通过索引通常可以帮助用户解决大多数的MySQL的性能优化的问题。
 
 
 
